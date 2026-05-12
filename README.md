@@ -1,10 +1,10 @@
-# ⚡ Power Flow Simulator — Newton-Raphson
+# Power Flow Simulator — Newton-Raphson
 
 Simulador interactivo de **Flujo de Potencia** en redes eléctricas, implementado con el método numérico de **Newton-Raphson**. Incluye un dashboard web interactivo y un solver en Python para uso avanzado.
 
 ---
 
-## 🌐 Demo en vivo
+## Demo en vivo
 
 > Abre `index.html` en tu navegador — no requiere instalación ni servidor.
 
@@ -12,7 +12,7 @@ O accede directamente en: `https://<tu-usuario>.github.io/power-flow-simulator`
 
 ---
 
-## 📁 Estructura del proyecto
+## Estructura del proyecto
 
 ```
 power-flow-simulator/
@@ -31,7 +31,7 @@ power-flow-simulator/
 
 ---
 
-## 🖥️ Dashboard Web (`index.html`)
+## Dashboard Web (`index.html`)
 
 Abre el archivo en cualquier navegador moderno. No requiere instalar nada.
 
@@ -59,7 +59,7 @@ Abre el archivo en cualquier navegador moderno. No requiere instalar nada.
 
 ---
 
-## 🐍 Solver Python (`power_flow.py`)
+## Solver Python (`power_flow.py`)
 
 ### Requisitos
 
@@ -119,7 +119,7 @@ from_bus,to_bus,R,X,B_total
 
 ---
 
-## 🔢 Base matemática
+## Base matemática
 
 ### Método Newton-Raphson
 
@@ -155,16 +155,3 @@ Y_ij = -y_serie                  ← fuera de diagonal
 donde `y_serie = 1/(R+jX)` y `y_shunt = jB/2`.
 
 ---
-
-## 📚 Referencias
-
-- Tinney, W.F. & Hart, C.E. (1967). *Power flow solution by Newton's method*. IEEE Trans. Power App. Syst.
-- Glover, Sarma & Overbye. *Power System Analysis and Design*, 5th ed.
-- Bergen & Vittal. *Power Systems Analysis*, 2nd ed.
-- Sereeter, B., Vuik, C. & Witteveen, C. (2019). *On a comparison of Newton–Raphson solvers for power flow problems*. Journal of Computational and Applied Mathematics, 360, 157–169.
-
----
-
-## 📄 Licencia
-
-MIT License — libre para uso académico y comercial.
