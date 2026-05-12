@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Power Flow Simulator — Newton-Raphson</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#0D1117;color:#E6EDF3;min-height:100vh}
+.app{display:grid;grid-template-columns:270px 1fr;min-height:100vh}
+.sidebar{border-right:1px solid #30363D;padding:14px;display:flex;flex-direction:column;gap:12px;background:#0D1117}
+.main{padding:14px;display:flex;flex-direction:column;gap:12px;background:#0D1117}
+.section-label{font-size:10px;font-weight:600;color:#8B949E;text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px}
+.card{background:#161B22;border:1px solid #30363D;border-radius:10px;padding:12px}
+.bus-card{padding:10px 12px;cursor:pointer;transition:border-color .15s,background .15s}
+.bus-card:hover{background:#1C2128}
+.bus-card.selected{border-color:#388BFD;background:#1C2128}
+.bus-header{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.bus-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.bus-name{font-size:13px;font-weight:600;color:#E6EDF3}
+.bus-type-badge{font-size:10px;padding:2px 7px;border-radius:4px;font-weight:600;margin-left:auto}
+.badge-slack{background:#3D1F1F;color:#F85149}
+.badge-PV{background:#1A2D1A;color:#3FB950}
+.badge-PQ{background:#1A2840;color:#58A6FF}
+.bus-stats{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+.bus-stat{font-size:11px;color:#8B949E}
+.bus-stat span{color:#E6EDF3;font-weight:500;font-family:'Courier New',monospace}
+.field-row{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+.field-row label{font-size:11px;color:#8B949E;width:78px;flex-shrink:0}
+.field-row input[type=range]{flex:1;accent-color:#388BFD}
+.field-row .fval{font-size:11px;font-weight:600;color:#E6EDF3;width:58px;text-align:right;font-family:'Courier New',monospace}
+.field-row select{flex:1;font-size:12px;background:#1C2128;color:#E6EDF3;border:1px solid #30363D;border-radius:6px;padding:4px 8px}
+.solve-btn{width:100%;padding:9px;font-size:13px;font-weight:600;cursor:pointer;border-radius:8px;background:#1F6FEB;color:#fff;border:none;display:flex;align-items:center;justify-content:center;gap:6px;transition:background .15s}
+.solve-btn:hover{background:#388BFD}
+.status-bar{display:flex;align-items:center;gap:8px;font-size:11px;margin-top:8px}
+.status-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.metrics-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.metric{background:#161B22;border:1px solid #30363D;border-radius:8px;padding:10px 12px}
+.metric .ml{font-size:10px;color:#8B949E;margin-bottom:4px}
+.metric .mv{font-size:20px;font-weight:600;color:#E6EDF3;font-family:'Courier New',monospace}
+.metric .ms{font-size:10px;color:#8B949E}
+.viz-tabs{display:flex;gap:2px;border-bottom:1px solid #30363D;margin-bottom:12px}
+.vtab{padding:7px 14px;font-size:12px;font-weight:500;color:#8B949E;cursor:pointer;border:none;background:none;border-bottom:2px solid transparent;transition:all .15s}
+.vtab.active{color:#E6EDF3;border-bottom-color:#388BFD}
+.vtab:hover:not(.active){color:#E6EDF3}
+.vpanel{display:none}.vpanel.active{display:block}
+.vbar-row{display:flex;align-items:center;gap:8px;margin-bottom:7px;font-size:11px}
+.vbar-label{width:44px;text-align:right;color:#8B949E;font-family:'Courier New',monospace;flex-shrink:0}
+.vbar-track{flex:1;height:20px;background:#0D1117;border-radius:3px;position:relative;overflow:visible}
+.vbar-fill{height:100%;border-radius:3px;transition:width .4s ease}
+.vbar-val{width:64px;text-align:right;font-family:'Courier New',monospace;font-size:11px;color:#E6EDF3;flex-shrink:0}
+.vbar-ang{width:50px;text-align:right;font-family:'Courier New',monospace;font-size:10px;color:#8B949E;flex-shrink:0}
+.vline{position:absolute;top:-3px;bottom:-3px;width:1px}
+.vline-lbl{position:absolute;top:-14px;font-size:8px;transform:translateX(-50%);white-space:nowrap}
+.line-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:11px}
+.line-label{width:44px;color:#8B949E;font-family:'Courier New',monospace;flex-shrink:0}
+.line-bars{flex:1;display:flex;flex-direction:column;gap:3px}
+.line-track{height:11px;background:#0D1117;border-radius:2px;overflow:hidden}
+.line-fill{height:100%;border-radius:2px;transition:width .4s ease}
+.line-nums{width:96px;text-align:right;font-family:'Courier New',monospace;font-size:10px;color:#8B949E;flex-shrink:0;line-height:1.6}
+.iter-log{font-family:'Courier New',monospace;font-size:11px;color:#8B949E;line-height:1.9;background:#0D1117;border-radius:8px;padding:10px 14px;max-height:220px;overflow-y:auto;border:1px solid #30363D}
+.iter-log .iter-ok{color:#3FB950}
+.iter-log .iter-head{color:#E6EDF3;font-weight:600}
+.net-wrap{width:100%;overflow:visible}
+.stab-row{display:flex;gap:4px;margin-bottom:10px;flex-wrap:wrap}
+.stab{padding:5px 11px;font-size:11px;font-weight:500;cursor:pointer;border-radius:6px;background:none;border:1px solid #30363D;color:#8B949E;transition:all .15s}
+.stab:hover{color:#E6EDF3;border-color:#8B949E}
+.stab.active{background:#1C2128;color:#E6EDF3;border-color:#8B949E}
+.warn-inline{color:#D29922;font-size:10px}
+.divider{border:none;border-top:1px solid #30363D;margin:4px 0}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:#8B949E;margin-top:10px}
+.legend span{display:flex;align-items:center;gap:5px}
+.legend-dot{width:8px;height:8px;border-radius:2px;flex-shrink:0}
+</style>
+</head>
+<body>
+
+<div class="app">
+
+<!-- ══ SIDEBAR ══════════════════════════════════════════════════════ -->
+<div class="sidebar">
+
+  <div>
+    <div class="section-label">Sistema de prueba</div>
+    <div class="stab-row">
+      <button class="stab active" onclick="loadSystem('ieee5',this)">IEEE 5-Bus</button>
+      <button class="stab" onclick="loadSystem('ieee14',this)">IEEE 14-Bus</button>
+      <button class="stab" onclick="loadSystem('mini3',this)">Mini 3-Bus</button>
+    </div>
+  </div>
+
+  <div>
+    <div class="section-label">Nodos — click para editar</div>
+    <div id="bus-list" style="display:flex;flex-direction:column;gap:6px"></div>
+  </div>
+
+  <div id="editor-panel" class="card" style="display:none">
+    <div class="section-label" id="editor-title">Editar nodo</div>
+    <div id="editor-fields"></div>
+  </div>
+
+  <hr class="divider">
+
+  <div>
+    <div class="section-label">Parámetros del solver</div>
+    <div class="field-row">
+      <label>Carga ×</label>
+      <input type="range" id="load-sl" min="50" max="200" step="5" value="100"
+        oninput="document.getElementById('load-val').textContent=this.value+'%';autoSolve()">
+      <span class="fval" id="load-val">100%</span>
+    </div>
+    <div class="field-row">
+      <label>Tolerancia</label>
+      <select id="tol-sel" onchange="autoSolve()">
+        <option value="1e-4">1e-4</option>
+        <option value="1e-6" selected>1e-6</option>
+        <option value="1e-8">1e-8</option>
+      </select>
+    </div>
+  </div>
+
+  <div style="margin-top:auto">
+    <button class="solve-btn" onclick="runSolver()">▶ Resolver ahora</button>
+    <div class="status-bar">
+      <div class="status-dot" id="status-dot" style="background:#30363D"></div>
+      <span id="status-txt" style="color:#8B949E">Listo</span>
+    </div>
+  </div>
+
+</div>
+
+<!-- ══ MAIN ═════════════════════════════════════════════════════════ -->
+<div class="main">
+
+  <div class="metrics-row">
+    <div class="metric"><div class="ml">Pérdidas activas</div><div class="mv" id="m-loss">—</div><div class="ms">MW</div></div>
+    <div class="metric"><div class="ml">V mínimo</div><div class="mv" id="m-vmin">—</div><div class="ms">pu</div></div>
+    <div class="metric"><div class="ml">V máximo</div><div class="mv" id="m-vmax">—</div><div class="ms">pu</div></div>
+    <div class="metric"><div class="ml">Iteraciones N-R</div><div class="mv" id="m-iter">—</div><div class="ms">convergencia</div></div>
+  </div>
+
+  <div class="card" style="flex:1">
+    <div class="viz-tabs">
+      <button class="vtab active" onclick="showVTab('voltages',this)">Voltajes</button>
+      <button class="vtab" onclick="showVTab('lines',this)">Flujo en líneas</button>
+      <button class="vtab" onclick="showVTab('network',this)">Diagrama de red</button>
+      <button class="vtab" onclick="showVTab('convergence',this)">Convergencia</button>
+    </div>
+
+    <div id="vp-voltages" class="vpanel active">
+      <div id="vbar-container"></div>
+      <div class="legend">
+        <span><span class="legend-dot" style="background:#F85149"></span>Slack</span>
+        <span><span class="legend-dot" style="background:#3FB950"></span>PV (generador)</span>
+        <span><span class="legend-dot" style="background:#58A6FF"></span>PQ (carga)</span>
+        <span><span class="legend-dot" style="background:#F85149;opacity:.5"></span>Violación de límite</span>
+      </div>
+    </div>
+
+    <div id="vp-lines" class="vpanel">
+      <div id="lines-container"></div>
+      <div class="legend">
+        <span><span class="legend-dot" style="background:#58A6FF"></span>P enviada (MW)</span>
+        <span><span class="legend-dot" style="background:#F85149"></span>Pérdidas (MW)</span>
+        <span style="color:#8B949E">Color: azul → naranja → rojo según nivel de carga</span>
+      </div>
+    </div>
+
+    <div id="vp-network" class="vpanel">
+      <svg id="net-svg" class="net-wrap" viewBox="0 0 580 300" style="height:300px"></svg>
+      <div class="legend">
+        <span><span class="legend-dot" style="background:#F85149"></span>Slack</span>
+        <span><span class="legend-dot" style="background:#3FB950"></span>PV</span>
+        <span><span class="legend-dot" style="background:#58A6FF"></span>PQ</span>
+        <span style="color:#8B949E">Grosor de línea proporcional al flujo · Número = MW</span>
+      </div>
+    </div>
+
+    <div id="vp-convergence" class="vpanel">
+      <div class="iter-log" id="iter-log">
+        <span class="iter-head">Presiona "Resolver" para ver el historial de Newton-Raphson.</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+</div>
+
+<script>
+/* ══════════════════════════════════════════════════════════════════
+   DATOS — SISTEMAS DE PRUEBA
+   Fuente: Glover, Sarma & Overbye — Power System Analysis and Design
+   Todos los valores en por unidad (pu), S_base = 100 MVA
+   ══════════════════════════════════════════════════════════════════ */
+const SYSTEMS = {
+  ieee5: {
+    name: 'IEEE 5-Bus',
+    buses: [
+      {id:1, type:'slack', Vm:1.06,  Va:0, Pg:0,    Qg:0, Pl:0,    Ql:0},
+      {id:2, type:'PV',   Vm:1.045, Va:0, Pg:0.40,  Qg:0, Pl:0.20, Ql:0.10},
+      {id:3, type:'PQ',   Vm:1.0,   Va:0, Pg:0,     Qg:0, Pl:0.25, Ql:0.105},
+      {id:4, type:'PQ',   Vm:1.0,   Va:0, Pg:0,     Qg:0, Pl:0.40, Ql:0.05},
+      {id:5, type:'PQ',   Vm:1.0,   Va:0, Pg:0,     Qg:0, Pl:0.50, Ql:0.10},
+    ],
+    lines: [
+      {f:1,t:2,R:0.02,X:0.06,B:0.060},
+      {f:1,t:3,R:0.08,X:0.24,B:0.025},
+      {f:2,t:3,R:0.06,X:0.18,B:0.020},
+      {f:2,t:5,R:0.04,X:0.12,B:0.015},
+      {f:3,t:4,R:0.01,X:0.03,B:0.010},
+    ],
+    pos: {1:[90,150],2:[220,55],3:[340,150],4:[460,240],5:[460,60]},
+  },
+
+  ieee14: {
+    name: 'IEEE 14-Bus',
+    buses: [
+      {id:1, type:'slack',Vm:1.060,Va:0,Pg:2.324,Qg:0,Pl:0,    Ql:0},
+      {id:2, type:'PV',  Vm:1.045,Va:0,Pg:0.40, Qg:0,Pl:0.217,Ql:0.127},
+      {id:3, type:'PQ',  Vm:1.010,Va:0,Pg:0,    Qg:0,Pl:0.942,Ql:0.190},
+      {id:4, type:'PV',  Vm:1.010,Va:0,Pg:0,    Qg:0,Pl:0.478,Ql:0.039},
+      {id:5, type:'PQ',  Vm:1.0,  Va:0,Pg:0,    Qg:0,Pl:0.076,Ql:0.016},
+      {id:6, type:'PQ',  Vm:1.0,  Va:0,Pg:0,    Qg:0,Pl:0.112,Ql:0.075},
+      {id:7, type:'PQ',  Vm:1.0,  Va:0,Pg:0,    Qg:0,Pl:0,    Ql:0},
+      {id:8, type:'PQ',  Vm:1.0,  Va:0,Pg:0,    Qg:0,Pl:0,    Ql:0},
+      {id:9, type:'PQ',  Vm:1.0,  Va:0,Pg:0,    Qg:0,Pl:0.295,Ql:0.166},
+      {id:10,type:'PQ',  Vm:1.0,  Va:0,Pg:0,    Qg:0,Pl:0.090,Ql:0.058},
+      {id:11,type:'PQ',  Vm:1.0,  Va:0,Pg:0,    Qg:0,Pl:0.035,Ql:0.018},
+      {id:12,type:'PQ',  Vm:1.0,  Va:0,Pg:0,    Qg:0,Pl:0.061,Ql:0.016},
+      {id:13,type:'PQ',  Vm:1.0,  Va:0,Pg:0,    Qg:0,Pl:0.135,Ql:0.058},
+      {id:14,type:'PQ',  Vm:1.0,  Va:0,Pg:0,    Qg:0,Pl:0.149,Ql:0.050},
+    ],
+    lines: [
+      {f:1,t:2, R:0.01938,X:0.05917,B:0.0528},{f:1,t:5, R:0.05403,X:0.22304,B:0.0492},
+      {f:2,t:3, R:0.04699,X:0.19797,B:0.0438},{f:2,t:4, R:0.05811,X:0.17632,B:0.0374},
+      {f:2,t:5, R:0.05695,X:0.17388,B:0.034}, {f:3,t:4, R:0.06701,X:0.17103,B:0.0346},
+      {f:4,t:5, R:0.01335,X:0.04211,B:0.0128},{f:4,t:7, R:0,      X:0.20912,B:0},
+      {f:5,t:6, R:0,      X:0.55618,B:0},     {f:6,t:11,R:0.09498,X:0.19890,B:0},
+      {f:6,t:12,R:0.12291,X:0.25581,B:0},     {f:6,t:13,R:0.06615,X:0.13027,B:0},
+      {f:7,t:8, R:0,      X:0.17615,B:0},     {f:7,t:9, R:0,      X:0.11001,B:0},
+      {f:9,t:10,R:0.03181,X:0.08450,B:0},     {f:9,t:14,R:0.12711,X:0.27038,B:0},
+      {f:10,t:11,R:0.08205,X:0.19207,B:0},    {f:12,t:13,R:0.22092,X:0.19988,B:0},
+      {f:13,t:14,R:0.17093,X:0.34802,B:0},
+    ],
+    pos: {
+      1:[60,150],2:[130,80],3:[220,50],4:[275,150],5:[185,195],
+      6:[355,195],7:[330,115],8:[415,75],9:[435,195],10:[485,265],
+      11:[450,290],12:[380,285],13:[315,285],14:[525,215]
+    },
+  },
+
+  mini3: {
+    name: 'Mini 3-Bus',
+    buses: [
+      {id:1,type:'slack',Vm:1.05,Va:0,Pg:0,   Qg:0,Pl:0,   Ql:0},
+      {id:2,type:'PV',  Vm:1.02,Va:0,Pg:0.50, Qg:0,Pl:0.30,Ql:0.10},
+      {id:3,type:'PQ',  Vm:1.0, Va:0,Pg:0,    Qg:0,Pl:0.60,Ql:0.20},
+    ],
+    lines: [
+      {f:1,t:2,R:0.02,X:0.04,B:0.010},
+      {f:1,t:3,R:0.01,X:0.03,B:0.010},
+      {f:2,t:3,R:0.03,X:0.08,B:0.005},
+    ],
+    pos: {1:[120,150],2:[300,60],3:[480,240]},
+  }
+};
+
+/* ══════════════════════════════════════════════════════════════════
+   ESTADO GLOBAL
+   ══════════════════════════════════════════════════════════════════ */
+const TC = {slack:'#F85149', PV:'#3FB950', PQ:'#58A6FF'};
+let state = {buses:[], lines:[], result:null, selectedBus:null, _pos:{}};
+function deepCopy(o){ return JSON.parse(JSON.stringify(o)); }
+
+/* ══════════════════════════════════════════════════════════════════
+   CARGA DE SISTEMA
+   ══════════════════════════════════════════════════════════════════ */
+function loadSystem(key, btn){
+  document.querySelectorAll('.stab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const sys = SYSTEMS[key];
+  state.buses = deepCopy(sys.buses);
+  state.lines = deepCopy(sys.lines);
+  state._pos  = sys.pos;
+  state.result = null;
+  state.selectedBus = null;
+  document.getElementById('editor-panel').style.display = 'none';
+  renderBusList();
+  runSolver();
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   LISTA DE NODOS
+   ══════════════════════════════════════════════════════════════════ */
+function renderBusList(){
+  const list = document.getElementById('bus-list');
+  list.innerHTML = '';
+  state.buses.forEach(b => {
+    const i   = state.buses.indexOf(b);
+    const r   = state.result;
+    const vm  = r ? r.Vm[i].toFixed(4) : '—';
+    const ang = r ? r.Va[i].toFixed(2)+'°' : '—';
+    const viol = r && (r.Vm[i]<0.95 || r.Vm[i]>1.05);
+    const div = document.createElement('div');
+    div.className = 'card bus-card'+(state.selectedBus===b.id?' selected':'');
+    div.onclick = () => selectBus(b.id);
+    div.innerHTML = `
+      <div class="bus-header">
+        <div class="bus-dot" style="background:${TC[b.type]}"></div>
+        <span class="bus-name">Bus ${b.id}</span>
+        ${viol?'<span class="warn-inline">⚠ V fuera de límite</span>':''}
+        <span class="bus-type-badge badge-${b.type}">${b.type}</span>
+      </div>
+      <div class="bus-stats">
+        <div class="bus-stat">|V| <span>${vm} pu</span></div>
+        <div class="bus-stat">θ <span>${ang}</span></div>
+        <div class="bus-stat">P_carga <span>${(b.Pl*100).toFixed(0)} MW</span></div>
+        <div class="bus-stat">P_gen <span>${(b.Pg*100).toFixed(0)} MW</span></div>
+      </div>`;
+    list.appendChild(div);
+  });
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   EDITOR DE NODO
+   ══════════════════════════════════════════════════════════════════ */
+function selectBus(id){
+  state.selectedBus = id;
+  const b = state.buses.find(x => x.id===id);
+  document.getElementById('editor-title').textContent = `Editar — Bus ${id}`;
+  document.getElementById('editor-panel').style.display = 'block';
+
+  let html = `
+    <div class="field-row">
+      <label>Tipo</label>
+      <select onchange="updateBus(${id},'type',this.value);selectBus(${id})">
+        <option value="slack"${b.type==='slack'?' selected':''}>Slack (referencia)</option>
+        <option value="PV"${b.type==='PV'?' selected':''}>PV — Generador</option>
+        <option value="PQ"${b.type==='PQ'?' selected':''}>PQ — Carga</option>
+      </select>
+    </div>`;
+
+  if(b.type==='slack'||b.type==='PV')
+    html += mkSlider(id,'|V| ref','Vm',95,110,1,' pu',100,3);
+  if(b.type==='PV'||b.type==='PQ'){
+    html += mkSlider(id,'P carga','Pl',0,250,5,' MW',100,0);
+    html += mkSlider(id,'Q carga','Ql',0,150,2,' MVAr',100,0);
+  }
+  if(b.type==='PV')
+    html += mkSlider(id,'P gen','Pg',0,400,5,' MW',100,0);
+
+  document.getElementById('editor-fields').innerHTML = html;
+  renderBusList();
+}
+
+function mkSlider(id, label, key, min, max, step, unit, scale, dec){
+  const val = (state.buses.find(x=>x.id===id)[key]*scale).toFixed(dec);
+  return `
+    <div class="field-row">
+      <label>${label}</label>
+      <input type="range" min="${min}" max="${max}" step="${step}" value="${val}"
+        oninput="updateBus(${id},'${key}',this.value/${scale});
+                 document.getElementById('sv_${id}_${key}').textContent=
+                 parseFloat(this.value).toFixed(${dec})+'${unit}'">
+      <span class="fval" id="sv_${id}_${key}">${val}${unit}</span>
+    </div>`;
+}
+
+function updateBus(id, key, val){
+  const b = state.buses.find(x => x.id===id);
+  if(b) b[key] = isNaN(val) ? val : parseFloat(val);
+  autoSolve();
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   AUTO-SOLVER — debounce 400 ms
+   ══════════════════════════════════════════════════════════════════ */
+let solveTimer = null;
+function autoSolve(){
+  clearTimeout(solveTimer);
+  solveTimer = setTimeout(runSolver, 400);
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   YBUS — Matriz de admitancia nodal (modelo π)
+   Y_ii = Σ(y_serie + y_shunt)   Y_ij = -y_serie
+   ══════════════════════════════════════════════════════════════════ */
+function buildYbus(buses, lines){
+  const n = buses.length;
+  const idx = {}; buses.forEach((b,i) => idx[b.id]=i);
+  const Yr = Array.from({length:n}, () => new Array(n).fill(0));
+  const Yi = Array.from({length:n}, () => new Array(n).fill(0));
+  for(const l of lines){
+    const i=idx[l.f], j=idx[l.t];
+    const z2 = l.R*l.R + l.X*l.X;
+    if(z2 < 1e-12) continue;
+    const g=l.R/z2, b=-l.X/z2, bsh=l.B/2;
+    Yr[i][i]+=g; Yi[i][i]+=b+bsh;
+    Yr[j][j]+=g; Yi[j][j]+=b+bsh;
+    Yr[i][j]-=g; Yi[i][j]-=b;
+    Yr[j][i]-=g; Yi[j][i]-=b;
+  }
+  return {Yr, Yi};
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   ECUACIONES DE POTENCIA NODAL
+   P_i = Σ_j |Vi||Vj|(G_ij cosθ_ij + B_ij sinθ_ij)
+   Q_i = Σ_j |Vi||Vj|(G_ij sinθ_ij − B_ij cosθ_ij)
+   ══════════════════════════════════════════════════════════════════ */
+function calcPQ(Vm, Va, Yr, Yi, n){
+  const P=new Array(n).fill(0), Q=new Array(n).fill(0);
+  for(let i=0;i<n;i++) for(let j=0;j<n;j++){
+    const th=Va[i]-Va[j], c=Math.cos(th), s=Math.sin(th), vv=Vm[i]*Vm[j];
+    P[i] += vv*(Yr[i][j]*c + Yi[i][j]*s);
+    Q[i] += vv*(Yr[i][j]*s - Yi[i][j]*c);
+  }
+  return {P, Q};
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   JACOBIANA PARTICIONADA J = [[J1,J2],[J3,J4]]
+   J1=∂P/∂θ  J2=∂P/∂|V|  J3=∂Q/∂θ  J4=∂Q/∂|V|
+   ══════════════════════════════════════════════════════════════════ */
+function buildJac(Vm, Va, Pc, Qc, Yr, Yi, ns, pq){
+  const nns=ns.length, npq=pq.length;
+  const J1=zz(nns,nns), J2=zz(nns,npq), J3=zz(npq,nns), J4=zz(npq,npq);
+  for(let r=0;r<nns;r++){ const i=ns[r];
+    for(let c=0;c<nns;c++){ const j=ns[c]; const th=Va[i]-Va[j];
+      J1[r][c]=i===j?(-Qc[i]-Yi[i][i]*Vm[i]*Vm[i])
+                    :Vm[i]*Vm[j]*(Yr[i][j]*Math.sin(th)-Yi[i][j]*Math.cos(th)); }
+    for(let c=0;c<npq;c++){ const j=pq[c]; const th=Va[i]-Va[j];
+      J2[r][c]=i===j?(Pc[i]/Vm[i]+Yr[i][i]*Vm[i])
+                    :Vm[i]*(Yr[i][j]*Math.cos(th)+Yi[i][j]*Math.sin(th)); }
+  }
+  for(let r=0;r<npq;r++){ const i=pq[r];
+    for(let c=0;c<nns;c++){ const j=ns[c]; const th=Va[i]-Va[j];
+      J3[r][c]=i===j?(Pc[i]-Yr[i][i]*Vm[i]*Vm[i])
+                    :-Vm[i]*Vm[j]*(Yr[i][j]*Math.cos(th)+Yi[i][j]*Math.sin(th)); }
+    for(let c=0;c<npq;c++){ const j=pq[c]; const th=Va[i]-Va[j];
+      J4[r][c]=i===j?(Qc[i]/Vm[i]-Yi[i][i]*Vm[i])
+                    :Vm[i]*(Yr[i][j]*Math.sin(th)-Yi[i][j]*Math.cos(th)); }
+  }
+  const nr=nns+npq, J=zz(nr,nr);
+  for(let r=0;r<nns;r++){ for(let c=0;c<nns;c++) J[r][c]=J1[r][c];
+                           for(let c=0;c<npq;c++) J[r][nns+c]=J2[r][c]; }
+  for(let r=0;r<npq;r++){ for(let c=0;c<nns;c++) J[nns+r][c]=J3[r][c];
+                           for(let c=0;c<npq;c++) J[nns+r][nns+c]=J4[r][c]; }
+  return J;
+}
+function zz(r,c){ return Array.from({length:r}, () => new Array(c).fill(0)); }
+
+/* Resolución lineal Ax=b por eliminación gaussiana con pivoteo parcial */
+function luSolve(A, b){
+  const n=A.length, M=A.map(r=>[...r]), x=b.slice();
+  for(let k=0;k<n;k++){
+    let mx=Math.abs(M[k][k]), pi=k;
+    for(let i=k+1;i<n;i++) if(Math.abs(M[i][k])>mx){mx=Math.abs(M[i][k]);pi=i;}
+    [M[k],M[pi]]=[M[pi],M[k]]; [x[k],x[pi]]=[x[pi],x[k]];
+    for(let i=k+1;i<n;i++){
+      const f=M[i][k]/M[k][k]; M[i][k]=0;
+      for(let j=k+1;j<n;j++) M[i][j]-=f*M[k][j];
+      x[i]-=f*x[k];
+    }
+  }
+  for(let i=n-1;i>=0;i--){
+    let s=x[i]; for(let j=i+1;j<n;j++) s-=M[i][j]*x[j]; x[i]=s/M[i][i];
+  }
+  return x;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   SOLVER PRINCIPAL — NEWTON-RAPHSON (NR-p-pol)
+   Referencia: Tinney & Hart, IEEE Trans. Power App. Syst., 1967
+   ══════════════════════════════════════════════════════════════════ */
+function runSolver(){
+  const loadMult = parseFloat(document.getElementById('load-sl').value)/100;
+  const tol      = parseFloat(document.getElementById('tol-sel').value);
+  const buses    = state.buses;
+  const lines    = state.lines;
+  const n        = buses.length;
+
+  setStatus('running','Calculando...');
+
+  const {Yr,Yi} = buildYbus(buses, lines);
+
+  // Potencia neta programada: gen − carga escalada (en pu)
+  const Psch = buses.map(b => b.Pg - b.Pl*loadMult);
+  const Qsch = buses.map(b => b.Qg - b.Ql*loadMult);
+
+  // Flat start: |V|=1.0 pu, θ=0° para nodos PQ
+  const Vm = buses.map(b => b.type==='PQ' ? 1.0 : b.Vm);
+  const Va = new Array(n).fill(0.0);
+
+  const idxNS = buses.reduce((a,b,i) => b.type!=='slack'?[...a,i]:a, []);
+  const idxPQ = buses.reduce((a,b,i) => b.type==='PQ'  ?[...a,i]:a, []);
+
+  const history=[], log=[];
+  let converged=false;
+
+  for(let it=0; it<50; it++){
+    const {P:Pc, Q:Qc} = calcPQ(Vm, Va, Yr, Yi, n);
+    const dP = idxNS.map(i => Psch[i]-Pc[i]);
+    const dQ = idxPQ.map(i => Qsch[i]-Qc[i]);
+    const mp = dP.length ? Math.max(...dP.map(Math.abs)) : 0;
+    const mq = dQ.length ? Math.max(...dQ.map(Math.abs)) : 0;
+    const mm = Math.max(mp, mq);
+    history.push(mm);
+    log.push({it:it+1, mp, mq, mm, ok:mm<tol});
+    if(mm < tol){ converged=true; break; }
+
+    const J = buildJac(Vm, Va, Pc, Qc, Yr, Yi, idxNS, idxPQ);
+    let dx;
+    try { dx = luSolve(J, [...dP,...dQ]); }
+    catch(e){ break; }
+
+    const nns = idxNS.length;
+    idxNS.forEach((bi,k) => Va[bi] += dx[k]);
+    idxPQ.forEach((bi,k) => Vm[bi] += dx[nns+k]);
+  }
+
+  // Potencias finales convergidas
+  const {P:Pf, Q:Qf} = calcPQ(Vm, Va, Yr, Yi, n);
+
+  // Flujos en líneas (modelo π)
+  const lineFlows = lines.map(l => {
+    const i = buses.findIndex(b => b.id===l.f);
+    const j = buses.findIndex(b => b.id===l.t);
+    const z2 = l.R*l.R + l.X*l.X;
+    if(z2<1e-12) return {f:l.f,t:l.t,Pij:0,Pji:0,loss:0};
+    const g=l.R/z2, b=-l.X/z2, bsh=l.B/2;
+    const Vir=Vm[i]*Math.cos(Va[i]), Vii=Vm[i]*Math.sin(Va[i]);
+    const Vjr=Vm[j]*Math.cos(Va[j]), Vji=Vm[j]*Math.sin(Va[j]);
+    const dVr=Vir-Vjr, dVi=Vii-Vji;
+    const Ir = g*dVr - b*dVi - bsh*Vii;
+    const Ii = g*dVi + b*dVr + bsh*Vir;
+    const Pij = (Vir*Ir + Vii*Ii)*100;
+    const Ir2= g*(-dVr) - b*(-dVi) - bsh*Vji;
+    const Ii2= g*(-dVi) + b*(-dVr) + bsh*Vjr;
+    const Pji= (Vjr*Ir2 + Vji*Ii2)*100;
+    return {f:l.f, t:l.t, Pij, Pji:-Pji, loss:Pij+Pji};
+  });
+
+  const totalLoss = lineFlows.reduce((s,l) => s+l.loss, 0);
+
+  state.result = {
+    converged, iterations:history.length,
+    Vm, Va:Va.map(a => a*180/Math.PI),
+    Pc:Pf.map(v => v*100), Qc:Qf.map(v => v*100),
+    history, log, lineFlows, totalLoss
+  };
+
+  setStatus(
+    converged ? 'ok' : 'warn',
+    converged ? `Convergió en ${history.length} iteraciones` : 'No convergió'
+  );
+  renderAll();
+}
+
+function setStatus(type, msg){
+  const dot=document.getElementById('status-dot');
+  const txt=document.getElementById('status-txt');
+  const col={ok:'#3FB950',warn:'#D29922',running:'#58A6FF'};
+  dot.style.background = col[type]||'#30363D';
+  txt.style.color = type==='running'?'#8B949E':'#E6EDF3';
+  txt.textContent = msg;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   RENDER
+   ══════════════════════════════════════════════════════════════════ */
+function renderAll(){
+  const r=state.result; if(!r) return;
+  document.getElementById('m-loss').textContent = r.totalLoss.toFixed(3);
+  document.getElementById('m-vmin').textContent = Math.min(...r.Vm).toFixed(4);
+  document.getElementById('m-vmax').textContent = Math.max(...r.Vm).toFixed(4);
+  document.getElementById('m-iter').textContent = r.iterations;
+  renderVoltages(); renderLines(); renderNetwork(); renderConvergence(); renderBusList();
+}
+
+function renderVoltages(){
+  const r=state.result; if(!r) return;
+  const Vmin=0.90, Vmax=1.12;
+  let html='';
+  state.buses.forEach((b,i) => {
+    const vm=r.Vm[i], ang=r.Va[i];
+    const pct=((vm-Vmin)/(Vmax-Vmin)*100).toFixed(1);
+    const viol=vm<0.95||vm>1.05;
+    const col=viol?'#F85149':TC[b.type];
+    const p95 =((0.95-Vmin)/(Vmax-Vmin)*100).toFixed(1);
+    const p100=((1.00-Vmin)/(Vmax-Vmin)*100).toFixed(1);
+    const p105=((1.05-Vmin)/(Vmax-Vmin)*100).toFixed(1);
+    html+=`<div class="vbar-row">
+      <span class="vbar-label">Bus ${b.id}</span>
+      <div class="vbar-track">
+        <div class="vbar-fill" style="width:${pct}%;background:${col}"></div>
+        <div class="vline" style="left:${p95}%;background:#8957E5">
+          <span class="vline-lbl" style="color:#8957E5">0.95</span></div>
+        <div class="vline" style="left:${p100}%;background:#8B949E">
+          <span class="vline-lbl" style="color:#8B949E">1.0</span></div>
+        <div class="vline" style="left:${p105}%;background:#F85149">
+          <span class="vline-lbl" style="color:#F85149">1.05</span></div>
+      </div>
+      <span class="vbar-val">${vm.toFixed(4)} pu</span>
+      <span class="vbar-ang">${ang.toFixed(2)}°</span>
+    </div>`;
+  });
+  document.getElementById('vbar-container').innerHTML=html;
+}
+
+function renderLines(){
+  const r=state.result; if(!r||!r.lineFlows) return;
+  const maxP=Math.max(...r.lineFlows.map(l=>Math.abs(l.Pij)),1);
+  let html='';
+  r.lineFlows.forEach(l => {
+    const pp=(Math.abs(l.Pij)/maxP*100).toFixed(1);
+    const lp=(Math.abs(l.loss)/maxP*100).toFixed(1);
+    const load=Math.abs(l.Pij)/maxP;
+    const col=load>0.8?'#F85149':load>0.5?'#D29922':'#58A6FF';
+    html+=`<div class="line-row">
+      <span class="line-label">${l.f}→${l.t}</span>
+      <div class="line-bars">
+        <div class="line-track"><div class="line-fill" style="width:${pp}%;background:${col}"></div></div>
+        <div class="line-track"><div class="line-fill" style="width:${lp}%;background:#F85149;opacity:.65"></div></div>
+      </div>
+      <span class="line-nums">
+        ${Math.abs(l.Pij).toFixed(1)} MW<br>
+        <span style="color:#F85149;font-size:9px">${Math.abs(l.loss).toFixed(3)} pérd.</span>
+      </span>
+    </div>`;
+  });
+  document.getElementById('lines-container').innerHTML=html;
+}
+
+function renderNetwork(){
+  const r=state.result, pos=state._pos;
+  const buses=state.buses, lines=state.lines;
+  let html='';
+  lines.forEach(l => {
+    const pi=pos[l.f], pj=pos[l.t]; if(!pi||!pj) return;
+    const lf=r&&r.lineFlows&&r.lineFlows.find(x=>x.f===l.f&&x.t===l.t);
+    const load=lf?Math.min(Math.abs(lf.Pij)/50,1):0.3;
+    const sw=(1+load*3.5).toFixed(1);
+    const col=load>0.8?'#F85149':load>0.5?'#D29922':'#58A6FF';
+    const mx=(pi[0]+pj[0])/2, my=(pi[1]+pj[1])/2;
+    html+=`<line x1="${pi[0]}" y1="${pi[1]}" x2="${pj[0]}" y2="${pj[1]}"
+            stroke="${col}" stroke-width="${sw}" opacity=".6"/>`;
+    if(lf&&Math.abs(lf.Pij)>0.5)
+      html+=`<text x="${mx}" y="${my-5}" text-anchor="middle" font-size="8"
+              fill="#8B949E" font-family="monospace">${Math.abs(lf.Pij).toFixed(1)}</text>`;
+  });
+  buses.forEach((b,i) => {
+    const p=pos[b.id]; if(!p) return;
+    const col=TC[b.type];
+    const vm=r?r.Vm[i].toFixed(3):'?';
+    const viol=r&&(r.Vm[i]<0.95||r.Vm[i]>1.05);
+    if(viol) html+=`<circle cx="${p[0]}" cy="${p[1]}" r="20"
+      fill="none" stroke="#F85149" stroke-width="1.5" stroke-dasharray="3 2"/>`;
+    html+=`<circle cx="${p[0]}" cy="${p[1]}" r="15"
+      fill="${col}" fill-opacity=".15"
+      stroke="${col}" stroke-width="${state.selectedBus===b.id?2:1}"/>`;
+    html+=`<text x="${p[0]}" y="${p[1]+1}" text-anchor="middle"
+      dominant-baseline="central" font-size="10" font-weight="600"
+      fill="${col}" font-family="monospace">${b.id}</text>`;
+    html+=`<text x="${p[0]}" y="${p[1]+25}" text-anchor="middle"
+      font-size="8" fill="#8B949E" font-family="monospace">${vm}</text>`;
+  });
+  document.getElementById('net-svg').innerHTML=html;
+}
+
+function renderConvergence(){
+  const r=state.result; if(!r) return;
+  const log=document.getElementById('iter-log');
+  log.innerHTML='<span class="iter-head">Historial Newton-Raphson — NR-p-pol (Tinney & Hart, 1967)</span>\n'+
+    r.log.map(l=>`<span${l.ok?' class="iter-ok"':''}> Iter ${String(l.it).padStart(2)} │ ΔP=${l.mp.toExponential(3)} │ ΔQ=${l.mq.toExponential(3)} │ max=${l.mm.toExponential(3)}${l.ok?' ✓':''}</span>`
+    ).join('\n');
+  log.scrollTop=0;
+}
+
+function showVTab(id, btn){
+  document.querySelectorAll('.vtab').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.vpanel').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('vp-'+id).classList.add('active');
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   ARRANQUE
+   ══════════════════════════════════════════════════════════════════ */
+loadSystem('ieee5', document.querySelector('.stab.active'));
+</script>
+</body>
+</html>
